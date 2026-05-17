@@ -1,0 +1,513 @@
+<div class="chat-layout">
+    <div class="sidebar @(sidebarOpen ? "open" : "")">
+        <div class="sidebar-header">
+            <button class="sidebar-toggle" @onclick="ToggleSidebar">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <button class="btn btn-primary btn-new-chat" @onclick="OnNewChat">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                New Chat
+            </button>
+        </div>
+        <div class="conversation-list">
+            @if (conversations.Any())
+            {
+                @foreach (var chat in conversations)
+                {
+                    <div class="conversation-item @(selectedChatId == chat.Id ? "active" : "")"
+                         @onclick="() => OnSelectChat(chat.Id)">
+                        <span class="conversation-title">
+                            @(chat.Title ?? "New Chat")
+                        </span>
+                        <button class="conversation-delete" @onclick="() => OnDeleteChat(chat.Id)" @onclick:stopPropagation="true" title="Delete chat">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18"></path>
+                                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"></path>
+                                <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+                            </svg>
+                        </button>
+                    </div>
+                }
+            }
+            else
+            {
+                <p class="no-chats">No conversations yet</p>
+            }
+        </div>
+    </div>
+    <div class="main-content">
+        <div class="top-bar">
+            <div class="top-bar-left">
+                <button class="mobile-menu-btn" @onclick="ToggleSidebar">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+                <h2 class="chat-title">@selectedChatTitle</h2>
+            </div>
+            <div class="top-bar-right">
+                <div class="model-selector-wrap">
+                    <label class="model-label" for="model-select">Model</label>
+                    <select id="model-select" class="model-select" @bind="selectedModelId" disabled="@isStreaming">
+                        @foreach (var m in availableModels)
+                        {
+                            <option value="@m.Id">@m.DisplayName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="chat-area" @ref="chatAreaRef">
+            @if (messages.Any())
+            {
+                @foreach (var msg in messages)
+                {
+                    <MessageBubble Role="@msg.Role" Content="@msg.Content" Timestamp="@msg.CreatedAt.ToString("HH:mm")" ModelId="@msg.ModelId" MessageId="@msg.Id" OnDelete="OnDeleteMessage" OnEdit="OnEditMessage" />
+                }
+                @if (isStreaming)
+                {
+                    <MessageBubble Role="Assistant" Content="@streamingContent" Streaming="true" ModelId="@selectedModelId" />
+                }
+                else if (messages.Any(m => m.Role == "assistant"))
+                {
+                    <div class="regenerate-bar">
+                        <button class="regenerate-btn" @onclick="OnRegenerate" disabled="@isStreaming">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="1 4 1 10 7 10"></polyline>
+                                <path d="M3.51 15a9 9 0 1 0 .49-3.45"></path>
+                            </svg>
+                            Regenerate response
+                        </button>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="welcome-screen">
+                    <div class="welcome-icon">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5"></path>
+                            <path d="M2 12l10 5 10-5"></path>
+                        </svg>
+                    </div>
+                    <h1>AI Chat</h1>
+                    <p>Ask a question, attach a document, or start from one of the suggested prompts below.</p>
+                    <div class="suggested-prompts">
+                        <button class="prompt-chip" @onclick='() => OnSendMessage("Summarize the key points from my uploaded content.")'>Summarize my content</button>
+                        <button class="prompt-chip" @onclick='() => OnSendMessage("List the main action items and open questions.")'>Extract actions</button>
+                        <button class="prompt-chip" @onclick='() => OnSendMessage("Create a concise executive overview.")'>Executive overview</button>
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="chat-footer">
+            <ChatInput Message="@currentMessage"
+                       OnSendMessage="OnSendMessage"
+                       Sending="@isStreaming"
+                       Files="@attachedFiles"
+                       ShowFiles="@showFiles"
+                       AllowedExtensions="@AllowedExtensions"
+                       OnFilesSelected="OnFilesSelected" />
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid? SelectedChatId { get; set; }
+
+    private List<Chat> conversations = new();
+    private List<ChatMessage> messages = new();
+    private string streamingContent = "";
+    private bool isStreaming = false;
+    private bool sidebarOpen = false;
+    private string selectedChatTitle = "AI Chat";
+    private string currentMessage = "";
+    private List<IBrowserFile> attachedFiles = new();
+    private bool showFiles = false;
+    private ElementReference chatAreaRef;
+    private Guid? selectedChatId;
+    private Guid chatId = Guid.Empty;
+    private static readonly string[] AllowedExtensions = [".pdf", ".docx", ".txt", ".md", ".json", ".csv", ".png", ".jpg", ".jpeg", ".gif"];
+
+    [Inject] private IChatService ChatService { get; set; } = null!;
+    [Inject] private IConversationStore Store { get; set; } = null!;
+    [Inject] private IRagService RagService { get; set; } = null!;
+    [Inject] private NavigationManager Nav { get; set; } = null!;
+    [Inject] private IJSRuntime JS { get; set; } = null!;
+    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+
+    private IReadOnlyList<AiChat.Config.ModelOption> availableModels = Array.Empty<AiChat.Config.ModelOption>();
+    private string selectedModelId = "";
+
+    private string CurrentUserId =>
+        (User = (AuthStateProvider.GetAuthenticationStateAsync().Result).User) is { } u
+            ? (u.FindFirstValue("oid") ?? u.Identity?.Name ?? "anonymous")
+            : "anonymous";
+
+    private ClaimsPrincipal? User { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        availableModels = ChatService.GetAvailableModels();
+        selectedModelId = ChatService.DefaultModelId;
+        await LoadConversations();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        selectedChatId = SelectedChatId;
+        chatId = SelectedChatId ?? Guid.Empty;
+
+        if (SelectedChatId.HasValue)
+        {
+            var chat = await Store.GetChatAsync(SelectedChatId.Value);
+            if (chat != null)
+            {
+                messages = chat.Messages.OrderBy(m => m.CreatedAt).ToList();
+                selectedChatTitle = chat.Title ?? "AI Chat";
+            }
+        }
+        else
+        {
+            messages.Clear();
+            selectedChatTitle = "AI Chat";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
+    }
+
+    private async Task LoadConversations()
+    {
+        var userId = CurrentUserId;
+        conversations = (await Store.GetChatsAsync(userId)).ToList();
+    }
+
+    private async Task OnNewChat()
+    {
+        var userId = CurrentUserId;
+        var chat = await Store.CreateChatAsync(userId, "New Chat");
+        Nav.NavigateTo($"/chat/{chat.Id}");
+    }
+
+    private async Task OnSelectChat(Guid chatId)
+    {
+        var chat = await Store.GetChatAsync(chatId);
+        if (chat != null)
+        {
+            selectedChatId = chatId;
+            this.chatId = chatId;
+            messages = chat.Messages.OrderBy(m => m.CreatedAt).ToList();
+            selectedChatTitle = chat.Title ?? "AI Chat";
+            Nav.NavigateTo($"/chat/{chatId}");
+        }
+    }
+
+    private async Task OnDeleteChat(Guid chatId)
+    {
+        await Store.DeleteChatAsync(chatId);
+        await LoadConversations();
+        if (selectedChatId == chatId)
+        {
+            selectedChatId = null;
+            this.chatId = Guid.Empty;
+            messages.Clear();
+            selectedChatTitle = "AI Chat";
+            Nav.NavigateTo("/chat");
+        }
+    }
+
+    private async Task OnSendMessage(string message)
+    {
+        var hasAttachments = attachedFiles.Any();
+        if (string.IsNullOrWhiteSpace(message) && !hasAttachments)
+            return;
+
+        var effectiveMessage = string.IsNullOrWhiteSpace(message)
+            ? "Please analyze the attached image."
+            : message;
+
+        var userId = CurrentUserId;
+        bool isNewChat;
+
+        if (SelectedChatId.HasValue)
+        {
+            // Verify the chat still exists — it may have been deleted
+            var existing = await Store.GetChatAsync(SelectedChatId.Value);
+            if (existing != null)
+            {
+                isNewChat = false;
+                chatId = SelectedChatId.Value;
+            }
+            else
+            {
+                isNewChat = true;
+                chatId = await ChatService.StartChatAsync(userId, effectiveMessage);
+                selectedChatTitle = effectiveMessage.Substring(0, Math.Min(50, effectiveMessage.Length));
+            }
+        }
+        else
+        {
+            isNewChat = true;
+            chatId = await ChatService.StartChatAsync(userId, effectiveMessage);
+            selectedChatTitle = effectiveMessage.Substring(0, Math.Min(50, effectiveMessage.Length));
+        }
+
+        currentMessage = string.Empty;
+
+        // Buffer attached files for this turn. Images are sent directly to the
+        // model as multimodal content; non-image files go through RAG so their
+        // text can be retrieved by future turns.
+        var turnAttachments = new List<ChatAttachment>();
+        if (attachedFiles.Any())
+        {
+            foreach (var file in attachedFiles)
+            {
+                try
+                {
+                    await using var stream = file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024); // 20 MB
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms);
+                    var bytes = ms.ToArray();
+                    var attachment = new ChatAttachment(file.Name, file.ContentType, bytes);
+                    turnAttachments.Add(attachment);
+
+                    if (!attachment.IsImage)
+                    {
+                        using var ragStream = new MemoryStream(bytes, writable: false);
+                        await RagService.ProcessAndChunkDocumentAsync(chatId, file.Name, ragStream, CancellationToken.None);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    messages.Add(new ChatMessage
+                    {
+                        ChatId = chatId,
+                        Role = "system",
+                        Content = $"Failed to attach '{file.Name}': {ex.Message}",
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+            attachedFiles.Clear();
+            showFiles = false;
+        }
+
+        // Build the display content that gets saved with the user message. Images
+        // are inlined as markdown so the message bubble (and chat history) shows
+        // exactly what the user posted.
+        var displayContent = BuildDisplayContent(effectiveMessage, turnAttachments);
+
+        messages.Add(new ChatMessage
+        {
+            ChatId = chatId,
+            Role = "user",
+            Content = displayContent,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        // Start streaming response
+        isStreaming = true;
+        streamingContent = "";
+        StateHasChanged();
+
+        try
+        {
+            await foreach (var chunk in ChatService.SendMessageAsync(chatId, displayContent, turnAttachments, CancellationToken.None, selectedModelId))
+            {
+                streamingContent += chunk;
+                await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
+                StateHasChanged();
+            }
+        }
+        finally
+        {
+            isStreaming = false;
+            streamingContent = string.Empty;
+            var updatedChat = await Store.GetChatAsync(chatId);
+            messages = updatedChat?.Messages.OrderBy(m => m.CreatedAt).ToList() ?? new List<ChatMessage>();
+
+            // Silently generate and persist a title on the first assistant reply
+            if (isNewChat || (updatedChat?.Title is null or "New Chat" && updatedChat?.Messages.Count(m => m.Role == "assistant") == 1))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var generatedTitle = await ChatService.GenerateTitleAsync(effectiveMessage, CancellationToken.None);
+                        var chatToUpdate = await Store.GetChatAsync(chatId);
+                        if (chatToUpdate != null)
+                        {
+                            chatToUpdate.Title = generatedTitle;
+                            await Store.UpdateChatAsync(chatToUpdate);
+                            await InvokeAsync(async () =>
+                            {
+                                selectedChatTitle = generatedTitle;
+                                await LoadConversations();
+                                StateHasChanged();
+                            });
+                        }
+                    }
+                    catch { /* title generation is best-effort */ }
+                });
+            }
+
+            await LoadConversations();
+            StateHasChanged();
+            await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
+            if (isNewChat)
+                Nav.NavigateTo($"/chat/{chatId}", replace: true);
+        }
+    }
+
+    private async Task OnFilesSelected(List<IBrowserFile> files)
+    {
+        attachedFiles = files;
+        showFiles = attachedFiles.Any();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Builds the persisted user-message content. Image attachments are inlined
+    /// as markdown images so the chat bubble (and the rehydrated chat history)
+    /// renders exactly what the user sent.
+    /// </summary>
+    private static string BuildDisplayContent(string text, IReadOnlyList<ChatAttachment> attachments)
+    {
+        if (attachments.Count == 0)
+            return text;
+
+        var sb = new StringBuilder();
+        sb.Append(text);
+
+        foreach (var attachment in attachments)
+        {
+            if (!attachment.IsImage)
+                continue;
+
+            var mediaType = string.IsNullOrWhiteSpace(attachment.ContentType)
+                ? "image/png"
+                : attachment.ContentType;
+            var base64 = Convert.ToBase64String(attachment.Content);
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.Append($"![{attachment.FileName}](data:{mediaType};base64,{base64})");
+        }
+
+        return sb.ToString();
+    }
+
+    private async Task OnRegenerate()
+    {
+        if (isStreaming || !selectedChatId.HasValue)
+            return;
+
+        var lastUser = messages.LastOrDefault(m => m.Role == "user");
+        if (lastUser == null)
+            return;
+
+        chatId = selectedChatId.Value;
+
+        // Remove last assistant message from UI immediately
+        var lastAssistant = messages.LastOrDefault(m => m.Role == "assistant");
+        if (lastAssistant != null)
+            messages.Remove(lastAssistant);
+
+        isStreaming = true;
+        streamingContent = "";
+        StateHasChanged();
+
+        try
+        {
+            await foreach (var chunk in ChatService.RegenerateAsync(chatId, CancellationToken.None, selectedModelId))
+            {
+                streamingContent += chunk;
+                await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
+                StateHasChanged();
+            }
+        }
+        finally
+        {
+            isStreaming = false;
+            streamingContent = string.Empty;
+            var updatedChat = await Store.GetChatAsync(chatId);
+            messages = updatedChat?.Messages.OrderBy(m => m.CreatedAt).ToList() ?? new List<ChatMessage>();
+            StateHasChanged();
+            await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
+        }
+    }
+
+    private void ToggleSidebar()
+    {
+        sidebarOpen = !sidebarOpen;
+    }
+
+    private async Task OnDeleteMessage(Guid messageId)
+    {
+        await Store.DeleteMessageAsync(messageId);
+        messages.RemoveAll(m => m.Id == messageId);
+        StateHasChanged();
+    }
+
+    private async Task OnEditMessage((Guid MessageId, string NewContent) edit)
+    {
+        if (isStreaming) return;
+
+        var activeChatId = selectedChatId ?? chatId;
+        if (activeChatId == Guid.Empty)
+            return;
+
+        chatId = activeChatId;
+
+        var target = messages.FirstOrDefault(m => m.Id == edit.MessageId);
+        if (target == null) return;
+
+        // Update the edited message content in the DB
+        await Store.UpdateMessageAsync(edit.MessageId, edit.NewContent);
+
+        // Delete all messages that came after this one
+        await Store.DeleteMessagesAfterAsync(activeChatId, target.CreatedAt);
+
+        // Reflect changes in UI immediately
+        target.Content = edit.NewContent;
+        messages.RemoveAll(m => m.CreatedAt > target.CreatedAt);
+        StateHasChanged();
+
+        // Stream a new AI response
+        isStreaming = true;
+        streamingContent = "";
+        StateHasChanged();
+
+        try
+        {
+            await foreach (var chunk in ChatService.RespondToCurrentHistoryAsync(activeChatId, CancellationToken.None, selectedModelId))
+            {
+                streamingContent += chunk;
+                await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
+                StateHasChanged();
+            }
+        }
+        finally
+        {
+            isStreaming = false;
+            streamingContent = string.Empty;
+            var updatedChat = await Store.GetChatAsync(activeChatId);
+            messages = updatedChat?.Messages.OrderBy(m => m.CreatedAt).ToList() ?? messages;
+            StateHasChanged();
+            await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
+        }
+    }
+}

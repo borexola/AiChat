@@ -1,0 +1,10 @@
+@page "/chat"
+@page "/chat/{chatId:guid}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<ChatLayout SelectedChatId="@chatId" />
+
+@code {
+    [Parameter] public Guid? chatId { get; set; }
+}

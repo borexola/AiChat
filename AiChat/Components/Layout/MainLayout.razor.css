@@ -1,0 +1,129 @@
+.main-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    background: linear-gradient(180deg, #fdf8f0 0%, #fef3e2 100%);
+}
+.top-bar {
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    background: #1a1d21;
+    color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    flex-shrink: 0;
+}
+
+.top-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.app-logo {
+    color: #ffa600;
+}
+
+.app-name {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.top-bar-right {
+    display: flex;
+    align-items: center;
+}
+
+.main-body {
+    flex: 1;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.app-sidebar {
+    border-right: 1px solid rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(12px);
+}
+
+.app-content {
+    min-width: 0;
+    overflow: auto;
+    padding: 24px;
+}
+
+.main-body.chat-mode {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.main-body.chat-mode .app-content {
+    padding: 0;
+}
+
+.user-menu {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-name {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 500;
+}
+
+@media (max-width: 900px) {
+    .main-body {
+        grid-template-columns: 1fr;
+    }
+
+    .app-sidebar {
+        display: none;
+    }
+
+    .app-content {
+        padding: 16px;
+    }
+}
+
+#blazor-error-ui {
+    color-scheme: light only;
+    background: lightyellow;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    padding: 0.6rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+/* ── App footer ── */
+.app-footer {
+    flex-shrink: 0;
+    text-align: center;
+    padding: 8px 24px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+    background: #1a1d21;
+    letter-spacing: 0.2px;
+}
+
+.app-footer a {
+    color: rgba(255, 166, 0, 0.8);
+    text-decoration: none;
+}
+
+.app-footer a:hover {
+    color: #ffa600;
+}

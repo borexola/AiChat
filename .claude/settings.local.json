@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet restore *)",
+      "Bash(dotnet build *)",
+      "Read(//c/Users/borex/.nuget/packages/pdfpig/**)",
+      "Read(//c/Users/borex/.nuget/packages/**)",
+      "Bash(dotnet list *)",
+      "Bash(dotnet tool *)",
+      "Bash(ilspycmd ~/.nuget/packages/azure.ai.openai/2.1.0/lib/netstandard2.0/Azure.AI.OpenAI.dll --type ChatMessage)",
+      "Bash(ilspycmd ~/.nuget/packages/azure.ai.openai/2.1.0/lib/netstandard2.0/Azure.AI.OpenAI.dll)",
+      "Bash(ilspycmd ~/.nuget/packages/pdfpig/0.1.10/lib/netstandard2.0/UglyToad.PdfPig.dll)",
+      "Bash(ilspycmd ~/.nuget/packages/openai/2.1.0/lib/net6.0/OpenAI.dll)",
+      "Bash(python *)",
+      "Bash(pwsh *)",
+      "Bash(dotnet script *)",
+      "Bash(dotnet new *)",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(dotnet run *)",
+      "Bash(openssl rand *)"
+    ]
+  }
+}

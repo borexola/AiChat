@@ -1,0 +1,13 @@
+<AuthorizeView>
+    <Authorized>
+        <div class="user-menu">
+            <span class="user-name">@context.User.Identity?.Name</span>
+            <a href="/account/signout" class="btn btn-sm btn-outline-light">Sign out</a>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="user-menu">
+            <a href="/account/signin" class="btn btn-sm btn-outline-light">Sign in</a>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>

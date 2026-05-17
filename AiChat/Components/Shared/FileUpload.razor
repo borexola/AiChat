@@ -1,0 +1,63 @@
+@inject IJSRuntime JS
+
+<div id="@dropZoneId" class="file-upload-zone">
+    <InputFile id="@fileInputId" class="file-upload-input" OnChange="OnFileSelected" accept="@string.Join(',', AllowedExtensions)" multiple />
+    <label class="file-upload-content" for="@fileInputId">
+        <svg class="upload-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <p class="upload-text">Drag & drop files here or <span class="browse-link">browse</span></p>
+        <p class="upload-hint">PDF, DOCX, TXT, MD, JSON, CSV, PNG, JPG, GIF (max 10 MB each)</p>
+    </label>
+</div>
+
+@code {
+    private readonly string dropZoneId = $"dz-{Guid.NewGuid():N}";
+    private readonly string fileInputId = $"fi-{Guid.NewGuid():N}";
+
+    [Parameter] public EventCallback<List<IBrowserFile>> OnFilesSelected { get; set; }
+    [Parameter] public string[] AllowedExtensions { get; set; } = Array.Empty<string>();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await JS.InvokeVoidAsync("initDropZone", dropZoneId, fileInputId);
+    }
+
+    // Maximum size accepted per file. Mirrors the limit advertised in the UI hint.
+    private const long MaxFileSizeBytes = 10L * 1024 * 1024;
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var sourceFiles = e.GetMultipleFiles(50);
+        if (sourceFiles.Count == 0)
+            return;
+
+        // Buffer each file into memory immediately. The IBrowserFile returned by
+        // InputFile is backed by a streamed JS interop channel that becomes invalid
+        // once the InputFile component is unmounted/re-rendered. Reading later (for
+        // example when the user clicks Send) can fault the SignalR circuit and crash
+        // the app. Reading now keeps the bytes alive for the rest of the request.
+        var buffered = new List<IBrowserFile>(sourceFiles.Count);
+        foreach (var file in sourceFiles)
+        {
+            try
+            {
+                await using var stream = file.OpenReadStream(MaxFileSizeBytes);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                buffered.Add(new InMemoryBrowserFile(file.Name, file.ContentType, ms.ToArray()));
+            }
+            catch
+            {
+                // Skip files that fail to buffer; a faulted stream must not take
+                // down the circuit.
+            }
+        }
+
+        if (buffered.Count > 0)
+            await OnFilesSelected.InvokeAsync(buffered);
+    }
+}

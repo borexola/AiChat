@@ -1,0 +1,37 @@
+.file-upload-zone {
+    position: relative;
+    border: 2px dashed var(--border-color, #e5e7eb);
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+    margin-bottom: 8px;
+    cursor: pointer;
+}
+
+.file-upload-zone.dragging {
+    border-color: var(--primary-color, #4f46e5);
+    background: rgba(79, 70, 229, 0.04);
+}
+
+.file-upload-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.file-upload-content {
+    display: block;
+    cursor: pointer;
+}
+
+.browse-link {
+    color: var(--primary-color, #4f46e5);
+    font-weight: 600;
+}

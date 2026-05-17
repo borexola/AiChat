@@ -1,0 +1,189 @@
+@using Markdig
+@using System.Net
+
+<div class="message-bubble @(Role == "user" ? "user-message" : "assistant-message") @(isEditing ? "editing" : "")">
+    <div class="bubble-body">
+        <div class="message-header">
+            <span class="message-role">@(Role == "user" ? "You" : (!string.IsNullOrEmpty(ModelId) ? ModelId : "Assistant"))</span>
+            @if (!string.IsNullOrEmpty(Timestamp))
+            {
+                <span class="message-time">@Timestamp</span>
+            }
+        </div>
+
+        @if (isEditing)
+        {
+            <div class="message-edit-area">
+                <textarea class="message-edit-textarea"
+                          @bind="editContent"
+                          @bind:event="oninput"
+                          rows="3"
+                          @ref="editTextareaRef"></textarea>
+                <div class="message-edit-actions">
+                    <button type="button" class="message-edit-send" @onclick="SubmitEdit" disabled="@string.IsNullOrWhiteSpace(editContent)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13"/>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                        </svg>
+                        Send
+                    </button>
+                    <button type="button" class="message-edit-cancel" @onclick="CancelEdit">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="message-content @(Streaming ? "streaming" : "") markdown-body" @ref="messageContentRef">
+                @if (Streaming)
+                {
+                    @Content
+                    <span class="cursor"></span>
+                }
+                else
+                {
+                    @((MarkupString)RenderMarkdown(Content))
+                }
+            </div>
+        }
+
+        @if (!Streaming && !isEditing)
+        {
+            <div class="message-footer">
+                <button type="button"
+                        class="message-copy-btn @(copied ? "copied" : "")"
+                        @onclick="CopyToClipboard"
+                        title="@(copied ? "Copied!" : "Copy")">
+                    @if (copied)
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    }
+                    else
+                    {
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                    }
+                </button>
+                @if (OnEdit.HasDelegate)
+                {
+                    <button type="button"
+                            class="message-edit-btn"
+                            @onclick="StartEdit"
+                            title="Edit message">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                    </button>
+                }
+                @if (OnDelete.HasDelegate)
+                {
+                    <button type="button"
+                            class="message-delete-btn"
+                            @onclick="DeleteMessage"
+                            title="Delete message">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                            <path d="M10 11v6"/>
+                            <path d="M14 11v6"/>
+                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                        </svg>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Role { get; set; } = "user";
+    [Parameter] public string Content { get; set; } = "";
+    [Parameter] public bool Streaming { get; set; }
+    [Parameter] public string? Timestamp { get; set; }
+    [Parameter] public string? ModelId { get; set; }
+    [Parameter] public Guid MessageId { get; set; }
+    [Parameter] public EventCallback<Guid> OnDelete { get; set; }
+    [Parameter] public EventCallback<(Guid MessageId, string NewContent)> OnEdit { get; set; }
+
+    [Inject] private IJSRuntime JS { get; set; } = null!;
+
+    private bool copied;
+    private bool isEditing;
+    private string editContent = "";
+    private ElementReference editTextareaRef;
+    private ElementReference messageContentRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Wire any <img> tags inside this bubble to open the image modal on click.
+        if (!Streaming)
+            await JS.InvokeVoidAsync("wireMessageImages", messageContentRef);
+    }
+
+    private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .Build();
+
+    private string RenderMarkdown(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return string.Empty;
+
+        var normalized = content.Replace("\r\n", "\n");
+        var html = Markdown.ToHtml(normalized, MarkdownPipeline);
+
+        return string.IsNullOrWhiteSpace(html)
+            ? $"<p>{WebUtility.HtmlEncode(content)}</p>"
+            : html;
+    }
+
+    private async Task CopyToClipboard()
+    {
+        await JS.InvokeVoidAsync("copyTextToClipboard", Content ?? string.Empty);
+        copied = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        copied = false;
+        StateHasChanged();
+    }
+
+    private async Task DeleteMessage()
+    {
+        if (OnDelete.HasDelegate)
+            await OnDelete.InvokeAsync(MessageId);
+    }
+
+    private async Task StartEdit()
+    {
+        editContent = Content;
+        isEditing = true;
+        StateHasChanged();
+        await Task.Yield();
+        await JS.InvokeVoidAsync("focusElement", editTextareaRef);
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+        editContent = "";
+    }
+
+    private async Task SubmitEdit()
+    {
+        if (string.IsNullOrWhiteSpace(editContent) || !OnEdit.HasDelegate)
+            return;
+
+        isEditing = false;
+        await OnEdit.InvokeAsync((MessageId, editContent.Trim()));
+    }
+}

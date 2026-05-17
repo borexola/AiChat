@@ -1,0 +1,39 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+
+<div class="main-shell">
+    <div class="top-bar">
+        <div class="top-bar-left">
+            <svg class="app-logo" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                <path d="M2 17l10 5 10-5"></path>
+                <path d="M2 12l10 5 10-5"></path>
+            </svg>
+            <span class="app-name">AI Chat</span>
+        </div>
+        <div class="top-bar-right">
+            <UserMenu />
+        </div>
+    </div>
+    <div class="main-body @(IsChatRoute ? "chat-mode" : string.Empty)">
+        @if (!IsChatRoute)
+        {
+            <aside class="app-sidebar">
+                <NavMenu />
+            </aside>
+        }
+        <main class="app-content">
+            @Body
+        </main>
+    </div>
+    @if (!IsChatRoute)
+    {
+        <footer class="app-footer">
+            Developed by <strong>Bori Olaleye</strong> &copy; 2026
+        </footer>
+    }
+</div>
+
+@code {
+    private bool IsChatRoute => Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("chat", StringComparison.OrdinalIgnoreCase);
+}
