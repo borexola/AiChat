@@ -13,11 +13,11 @@ public class AzureConfig
 {
     public string? Endpoint { get; set; }
     public string? ApiKey { get; set; }
-    public string? DeploymentName { get; set; }
-    public List<ModelOption> Models { get; set; } = new();
+    public string? DefaultDeployment { get; set; }
+    public List<DeploymentOption> Deployments { get; set; } = new();
 }
 
-public class ModelOption
+public class DeploymentOption
 {
     public string Id { get; set; } = "";
     public string DisplayName { get; set; } = "";

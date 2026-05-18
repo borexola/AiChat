@@ -3,6 +3,7 @@ using AiChat.Components;
 using AiChat.Config;
 using AiChat.Data;
 using AiChat.Services;
+using Azure.Core;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using Microsoft.AspNetCore.Authentication;
@@ -12,19 +13,44 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Explicitly load environment variables with the AICHAT_ prefix (highest local priority).
+// Standard unprefixed env vars (e.g. EntraId__ClientSecret) are already loaded by the
+// default builder. Prefixed vars are stripped of the prefix before mapping, so
+// AICHAT_EntraId__ClientSecret → EntraId:ClientSecret in configuration.
+builder.Configuration.AddEnvironmentVariables("AICHAT_");
+
 // If KeyVault URL is configured, load all secrets from KeyVault first
 // Secret naming convention: Azure--ApiKey, Sql--ConnectionString, EntraId--TenantId, etc.
+// Resolved Key Vault credential — also used by KeyManager for the encryption key.
+TokenCredential? resolvedKvCredential = null;
+
 var kvUrl = builder.Configuration["KeyVault:Url"];
 if (!string.IsNullOrEmpty(kvUrl))
 {
-    var credential = new DefaultAzureCredential();
-    var client = new SecretClient(new Uri(kvUrl), credential);
+    var useManagedIdentity = builder.Configuration.GetValue<bool>("KeyVault:UseManagedIdentity");
+
+    TokenCredential kvCredential;
+    if (useManagedIdentity)
+    {
+        kvCredential = new DefaultAzureCredential();
+    }
+    else
+    {
+        var tenantId     = builder.Configuration["EntraId:TenantId"]     ?? throw new InvalidOperationException("EntraId:TenantId is required for Key Vault access when not using managed identity.");
+        var clientId     = builder.Configuration["EntraId:ClientId"]     ?? throw new InvalidOperationException("EntraId:ClientId is required for Key Vault access when not using managed identity.");
+        var clientSecret = builder.Configuration["EntraId:ClientSecret"] ?? throw new InvalidOperationException("EntraId:ClientSecret is required for Key Vault access when not using managed identity.");
+        kvCredential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+    }
+
+    resolvedKvCredential = kvCredential;
+    var client = new SecretClient(new Uri(kvUrl), kvCredential);
     var secretValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
-    // Load all secrets from KeyVault
-    var secrets = client.GetPropertiesOfSecretsAsync().ToListAsync().GetAwaiter().GetResult();
+    var secretList = new List<Azure.Security.KeyVault.Secrets.SecretProperties>();
+    await foreach (var prop in client.GetPropertiesOfSecretsAsync())
+        secretList.Add(prop);
 
-    foreach (var secret in secrets)
+    foreach (var secret in secretList)
     {
         if (secret.Name.Equals("encryption-key", StringComparison.OrdinalIgnoreCase))
             continue; // Handled separately by KeyManager
@@ -33,6 +59,13 @@ if (!string.IsNullOrEmpty(kvUrl))
         var configKey = secret.Name
             .Replace("--", ":")
             .Replace("__", ":");
+
+        // Local config (appsettings.Development.json, env vars, etc.) takes
+        // priority over Key Vault so developers can override values without
+        // touching the vault.
+        if (!string.IsNullOrEmpty(builder.Configuration[configKey]))
+            continue;
+
         secretValues[configKey] = secretValue;
     }
 
@@ -79,7 +112,7 @@ builder.Services.AddSingleton<IEncryptionKeyManager>(sp =>
         ?? new KeyVaultConfig();
     var encConfig = builder.Configuration.GetSection("Encryption").Get<EncryptionConfig>()
         ?? new EncryptionConfig();
-    return new KeyManager(kvConfig, encConfig);
+    return new KeyManager(kvConfig, encConfig, resolvedKvCredential);
 });
 
 var app = builder.Build();
@@ -99,9 +132,12 @@ app.UseAntiforgery();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/account/signin", (string? returnUrl) =>
+app.MapGet("/account/signin", (string? returnUrl, HttpContext httpContext) =>
 {
-    var redirectUri = string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl;
+    // Reject absolute/external URLs to prevent open redirect attacks.
+    var redirectUri = (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+        ? returnUrl
+        : "/";
 
     return Results.Challenge(
         new AuthenticationProperties { RedirectUri = redirectUri },
@@ -110,7 +146,10 @@ app.MapGet("/account/signin", (string? returnUrl) =>
 
 app.MapGet("/account/signout", (string? returnUrl) =>
 {
-    var redirectUri = string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl;
+    // Reject absolute/external URLs to prevent open redirect attacks.
+    var redirectUri = (!string.IsNullOrWhiteSpace(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+        ? returnUrl
+        : "/";
 
     return Results.SignOut(
         new AuthenticationProperties { RedirectUri = redirectUri },

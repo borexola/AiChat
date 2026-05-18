@@ -40,14 +40,10 @@
         else
         {
             <div class="message-content @(Streaming ? "streaming" : "") markdown-body" @ref="messageContentRef">
+                @((MarkupString)RenderMarkdown(Content))
                 @if (Streaming)
                 {
-                    @Content
                     <span class="cursor"></span>
-                }
-                else
-                {
-                    @((MarkupString)RenderMarkdown(Content))
                 }
             </div>
         }

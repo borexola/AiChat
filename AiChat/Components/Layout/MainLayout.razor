@@ -4,12 +4,14 @@
 <div class="main-shell">
     <div class="top-bar">
         <div class="top-bar-left">
-            <svg class="app-logo" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-                <path d="M2 17l10 5 10-5"></path>
-                <path d="M2 12l10 5 10-5"></path>
-            </svg>
-            <span class="app-name">AI Chat</span>
+            <a href="/" class="app-home-link">
+                <svg class="app-logo" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                    <path d="M2 17l10 5 10-5"></path>
+                    <path d="M2 12l10 5 10-5"></path>
+                </svg>
+                <span class="app-name">AI Chat</span>
+            </a>
         </div>
         <div class="top-bar-right">
             <UserMenu />
@@ -26,12 +28,9 @@
             @Body
         </main>
     </div>
-    @if (!IsChatRoute)
-    {
-        <footer class="app-footer">
-            Developed by <strong>Bori Olaleye</strong> &copy; 2026
-        </footer>
-    }
+    <footer class="app-footer">
+        Developed by <strong>Bori Olaleye</strong> &copy; 2026
+    </footer>
 </div>
 
 @code {

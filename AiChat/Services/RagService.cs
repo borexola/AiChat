@@ -22,17 +22,28 @@ public class RagService : IRagService
         _contextFactory = contextFactory;
     }
 
+    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".pdf", ".docx", ".txt", ".md", ".json", ".csv",
+        ".png", ".jpg", ".jpeg", ".gif"
+    };
+
     public async Task<List<string>> ProcessAndChunkDocumentAsync(Guid chatId, string fileName, Stream fileStream, CancellationToken ct)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
-        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        // Sanitize and validate the file name to prevent path traversal and unsupported types.
+        var safeName = Path.GetFileName(fileName);
+        var extension = Path.GetExtension(safeName).ToLowerInvariant();
+        if (!AllowedExtensions.Contains(extension))
+            throw new NotSupportedException($"File type '{extension}' is not supported.");
+
         var text = extension switch
         {
             ".pdf" => ExtractTextFromPdf(fileStream),
             ".docx" => await ExtractTextFromDocx(fileStream, ct),
             ".txt" or ".md" or ".json" or ".csv" => await ExtractTextFromText(fileStream, ct),
-            ".png" or ".jpg" or ".jpeg" or ".gif" => await ExtractImageContextAsync(fileName, fileStream, ct),
+            ".png" or ".jpg" or ".jpeg" or ".gif" => await ExtractImageContextAsync(safeName, fileStream, ct),
             _ => throw new NotSupportedException($"File type '{extension}' is not supported.")
         };
 
@@ -45,7 +56,7 @@ public class RagService : IRagService
             var chunkModel = new DocumentChunk
             {
                 ChatId = chatId,
-                FileName = fileName,
+                FileName = safeName,
                 Text = chunk.Text,
                 ChunkIndex = chunk.Index,
                 ChunkSize = chunk.Text.Length,

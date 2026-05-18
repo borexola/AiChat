@@ -17,7 +17,7 @@ public class ChatService : IChatService
     private readonly IDbContextFactory<ChatDbContext> _contextFactory;
     private readonly Uri _endpoint;
     private readonly ApiKeyCredential _credential;
-    private readonly IReadOnlyList<ModelOption> _models;
+    private readonly IReadOnlyList<DeploymentOption> _deployments;
 
     public string DefaultModelId => _deploymentName;
 
@@ -26,8 +26,8 @@ public class ChatService : IChatService
         IConversationStore store,
         IDbContextFactory<ChatDbContext> contextFactory)
     {
-        _deploymentName = settings.Value.Azure.DeploymentName
-            ?? throw new InvalidOperationException("Azure:DeploymentName must be configured with a valid Azure OpenAI deployment name.");
+        _deploymentName = settings.Value.Azure.DefaultDeployment
+            ?? throw new InvalidOperationException("Azure:DefaultDeployment must be configured with a valid Azure OpenAI deployment name.");
         _store = store;
         _contextFactory = contextFactory;
 
@@ -39,13 +39,13 @@ public class ChatService : IChatService
         _endpoint = NormalizeEndpoint(endpoint);
         _credential = new ApiKeyCredential(apiKey);
 
-        var configuredModels = settings.Value.Azure.Models;
-        _models = configuredModels.Count > 0
-            ? configuredModels
-            : new List<ModelOption> { new() { Id = _deploymentName, DisplayName = _deploymentName } };
+        var configuredDeployments = settings.Value.Azure.Deployments;
+        _deployments = configuredDeployments.Count > 0
+            ? configuredDeployments
+            : new List<DeploymentOption> { new() { Id = _deploymentName, DisplayName = _deploymentName } };
     }
 
-    public IReadOnlyList<ModelOption> GetAvailableModels() => _models;
+    public IReadOnlyList<DeploymentOption> GetAvailableDeployments() => _deployments;
 
     private ChatClient GetClient(string? modelId)
     {
@@ -83,47 +83,42 @@ public class ChatService : IChatService
         });
 
         var messages = BuildMessages(chat, userMessage, currentAttachments: attachments).ToList();
+        var client = GetClient(modelId);
+        var streaming = client.CompleteChatStreaming(messages, new ChatCompletionOptions { MaxOutputTokenCount = 8192 }, ct);
+
         var assistantResponse = new StringBuilder();
-
         ClientResultException? notFoundException = null;
-        var streamedChunks = new List<string>();
+        bool cancelled = false;
 
-        try
+        using var enumerator = streaming.GetEnumerator();
+        while (true)
         {
-            var client = GetClient(modelId);
-            var streaming = client.CompleteChatStreaming(messages, new ChatCompletionOptions { MaxOutputTokenCount = 8192 }, ct);
-            foreach (var chunk in streaming)
+            StreamingChatCompletionUpdate? chunk = null;
+            try
             {
-                if (chunk.ContentUpdate is { })
-                {
-                    foreach (var part in chunk.ContentUpdate)
-                    {
-                        var content = part.Text;
-                        if (string.IsNullOrEmpty(content))
-                            continue;
+                ct.ThrowIfCancellationRequested();
+                if (!enumerator.MoveNext()) break;
+                chunk = enumerator.Current;
+            }
+            catch (OperationCanceledException) { cancelled = true; break; }
+            catch (ClientResultException ex) when (ex.Status == 404) { notFoundException = ex; break; }
 
-                        assistantResponse.Append(content);
-                        streamedChunks.Add(content);
-                    }
+            if (chunk?.ContentUpdate is { })
+            {
+                foreach (var part in chunk.ContentUpdate)
+                {
+                    var text = part.Text;
+                    if (string.IsNullOrEmpty(text)) continue;
+                    assistantResponse.Append(text);
+                    yield return text;
                 }
             }
         }
-        catch (ClientResultException ex) when (ex.Status == 404)
-        {
-            notFoundException = ex;
-        }
 
         if (notFoundException is not null)
-        {
             throw new InvalidOperationException(
                 "Azure OpenAI returned 404. Verify Azure:Endpoint uses your Azure OpenAI resource endpoint, for example https://<resource-name>.openai.azure.com/openai/v1/, and Azure:DeploymentName matches an existing deployment name.",
                 notFoundException);
-        }
-
-        foreach (var content in streamedChunks)
-        {
-            yield return content;
-        }
 
         if (assistantResponse.Length > 0)
         {
@@ -135,6 +130,8 @@ public class ChatService : IChatService
                 Content = assistantResponse.ToString()
             });
         }
+
+        if (cancelled) yield break;
     }
 
     public async IAsyncEnumerable<string> RegenerateAsync(Guid chatId, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct, string? modelId = null)
@@ -174,38 +171,40 @@ public class ChatService : IChatService
             yield break;
 
         var messages = BuildMessages(chat, lastUser.Content, skipLastUser: true).ToList();
+        var client = GetClient(modelId);
+        var streaming = client.CompleteChatStreaming(messages, new ChatCompletionOptions { MaxOutputTokenCount = 8192 }, ct);
+
         var assistantResponse = new StringBuilder();
         ClientResultException? notFoundException = null;
-        var streamedChunks = new List<string>();
+        bool cancelled = false;
 
-        try
+        using var enumerator = streaming.GetEnumerator();
+        while (true)
         {
-            var client = GetClient(modelId);
-            var streaming = client.CompleteChatStreaming(messages, new ChatCompletionOptions { MaxOutputTokenCount = 8192 }, ct);
-            foreach (var chunk in streaming)
+            StreamingChatCompletionUpdate? chunk = null;
+            try
             {
-                if (chunk.ContentUpdate is { })
+                ct.ThrowIfCancellationRequested();
+                if (!enumerator.MoveNext()) break;
+                chunk = enumerator.Current;
+            }
+            catch (OperationCanceledException) { cancelled = true; break; }
+            catch (ClientResultException ex) when (ex.Status == 404) { notFoundException = ex; break; }
+
+            if (chunk?.ContentUpdate is { })
+            {
+                foreach (var part in chunk.ContentUpdate)
                 {
-                    foreach (var part in chunk.ContentUpdate)
-                    {
-                        var content = part.Text;
-                        if (string.IsNullOrEmpty(content)) continue;
-                        assistantResponse.Append(content);
-                        streamedChunks.Add(content);
-                    }
+                    var text = part.Text;
+                    if (string.IsNullOrEmpty(text)) continue;
+                    assistantResponse.Append(text);
+                    yield return text;
                 }
             }
-        }
-        catch (ClientResultException ex) when (ex.Status == 404)
-        {
-            notFoundException = ex;
         }
 
         if (notFoundException is not null)
             throw new InvalidOperationException("Azure OpenAI returned 404.", notFoundException);
-
-        foreach (var content in streamedChunks)
-            yield return content;
 
         if (assistantResponse.Length > 0)
         {
@@ -217,6 +216,8 @@ public class ChatService : IChatService
                 Content = assistantResponse.ToString()
             });
         }
+
+        if (cancelled) yield break;
     }
 
     /// <summary>
@@ -244,38 +245,40 @@ public class ChatService : IChatService
             yield break;
 
         var messages = BuildMessages(chat, lastUser.Content, skipLastUser: true).ToList();
+        var client = GetClient(modelId);
+        var streaming = client.CompleteChatStreaming(messages, new ChatCompletionOptions { MaxOutputTokenCount = 8192 }, ct);
+
         var assistantResponse = new StringBuilder();
         ClientResultException? notFoundException = null;
-        var streamedChunks = new List<string>();
+        bool cancelled = false;
 
-        try
+        using var enumerator = streaming.GetEnumerator();
+        while (true)
         {
-            var client = GetClient(modelId);
-            var streaming = client.CompleteChatStreaming(messages, new ChatCompletionOptions { MaxOutputTokenCount = 8192 }, ct);
-            foreach (var chunk in streaming)
+            StreamingChatCompletionUpdate? chunk = null;
+            try
             {
-                if (chunk.ContentUpdate is { })
+                ct.ThrowIfCancellationRequested();
+                if (!enumerator.MoveNext()) break;
+                chunk = enumerator.Current;
+            }
+            catch (OperationCanceledException) { cancelled = true; break; }
+            catch (ClientResultException ex) when (ex.Status == 404) { notFoundException = ex; break; }
+
+            if (chunk?.ContentUpdate is { })
+            {
+                foreach (var part in chunk.ContentUpdate)
                 {
-                    foreach (var part in chunk.ContentUpdate)
-                    {
-                        var content = part.Text;
-                        if (string.IsNullOrEmpty(content)) continue;
-                        assistantResponse.Append(content);
-                        streamedChunks.Add(content);
-                    }
+                    var text = part.Text;
+                    if (string.IsNullOrEmpty(text)) continue;
+                    assistantResponse.Append(text);
+                    yield return text;
                 }
             }
-        }
-        catch (ClientResultException ex) when (ex.Status == 404)
-        {
-            notFoundException = ex;
         }
 
         if (notFoundException is not null)
             throw new InvalidOperationException("Azure OpenAI returned 404.", notFoundException);
-
-        foreach (var content in streamedChunks)
-            yield return content;
 
         if (assistantResponse.Length > 0)
         {
@@ -287,6 +290,8 @@ public class ChatService : IChatService
                 Content = assistantResponse.ToString()
             });
         }
+
+        if (cancelled) yield break;
     }
 
     public async Task<string> GenerateTitleAsync(string firstUserMessage, CancellationToken ct)

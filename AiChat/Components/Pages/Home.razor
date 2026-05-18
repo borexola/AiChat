@@ -8,13 +8,13 @@
         <div class="hero-eyebrow">
             <span class="hero-badge">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg>
-                Powered by Azure OpenAI
+                Powered by Azure AI Foundry
             </span>
         </div>
         <h1 class="hero-title">Your AI workspace,<br /><span class="hero-accent">built for real work.</span></h1>
         <p class="hero-sub">
-            Chat with multiple models, upload documents for grounded answers, and keep your conversation history
-            secure with Azure-backed identity and encryption.
+            Chat with multiple Azure OpenAI deployments, upload documents for grounded answers, and keep your
+            conversation history secure with Azure Entra ID, Key Vault encryption, and SQL-backed storage.
         </p>
         <div class="hero-cta">
             <a class="cta-primary" href="/chat">
@@ -27,8 +27,8 @@
 
     <section class="stats-row">
         <div class="stat-item">
-            <span class="stat-number">3</span>
-            <span class="stat-label">AI models available</span>
+            <span class="stat-number">∞</span>
+            <span class="stat-label">Deployments supported</span>
         </div>
         <div class="stat-divider"></div>
         <div class="stat-item">
@@ -38,12 +38,12 @@
         <div class="stat-divider"></div>
         <div class="stat-item">
             <span class="stat-number">10+</span>
-            <span class="stat-label">File types supported</span>
+            <span class="stat-label">File types for RAG</span>
         </div>
         <div class="stat-divider"></div>
         <div class="stat-item">
             <span class="stat-number">🔒</span>
-            <span class="stat-label">Azure Key Vault encryption</span>
+            <span class="stat-label">AES-256-GCM at rest</span>
         </div>
     </section>
 
@@ -52,29 +52,43 @@
             <div class="feature-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
             </div>
-            <h3>Multi-model chat</h3>
-            <p>Switch between GPT-5.4, DeepSeek V4 Pro, and Grok 4.3 mid-conversation. Each response is tagged with the model that produced it.</p>
+            <h3>Multi-deployment chat</h3>
+            <p>Select any configured Azure AI Foundry deployment per conversation. Responses stream token-by-token and are labelled with the deployment that produced them.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             </div>
-            <h3>Document grounding</h3>
-            <p>Upload PDFs, Word docs, CSVs, images, and more. The assistant draws on your content to give precise, context-aware answers.</p>
+            <h3>Document grounding (RAG)</h3>
+            <p>Attach PDFs, Word docs, spreadsheets, images, and more. Relevant chunks are automatically injected into the prompt so the assistant answers from your content.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
             </div>
             <h3>Enterprise security</h3>
-            <p>Microsoft Entra ID authentication, SQL-backed storage with field-level encryption, and keys managed by Azure Key Vault.</p>
+            <p>Sign in with Microsoft Entra ID — no local accounts. Conversation data is stored in SQL Server with field-level AES-256-GCM encryption, keys managed by Azure Key Vault.</p>
         </div>
         <div class="feature-card">
             <div class="feature-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 101.85-4.6"/></svg>
             </div>
-            <h3>Regenerate &amp; iterate</h3>
-            <p>Not happy with a response? Regenerate it instantly using the same or a different model without losing your conversation.</p>
+            <h3>Edit, regenerate &amp; iterate</h3>
+            <p>Edit any past message to branch the conversation, or regenerate the last response with the same or a different deployment — without losing your history.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            </div>
+            <h3>Image &amp; multimodal input</h3>
+            <p>Paste or upload images directly into the chat. The assistant processes them alongside your text for fully multimodal conversations.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>
+            </div>
+            <h3>Streaming responses</h3>
+            <p>Assistant replies arrive token-by-token with live Markdown rendering — no waiting for the full response before you start reading.</p>
         </div>
     </section>
 
@@ -82,7 +96,7 @@
         <div class="cta-banner-inner">
             <div class="cta-banner-text">
                 <h2>Ready to get started?</h2>
-                <p>Open a chat window and ask anything.</p>
+                <p>Open a conversation and ask anything — or upload a document to ground your answers.</p>
             </div>
             <a class="cta-primary" href="/chat">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
@@ -90,9 +104,5 @@
             </a>
         </div>
     </section>
-
-    <footer class="home-footer">
-        Developed by <strong>Bori Olaleye</strong> &copy; 2026
-    </footer>
 
 </div>

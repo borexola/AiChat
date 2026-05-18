@@ -5,10 +5,10 @@ namespace AiChat.Services;
 public interface IConversationStore
 {
     Task<Chat> CreateChatAsync(string userId, string? title = null, string? systemPrompt = null);
-    Task<Chat?> GetChatAsync(Guid id);
+    Task<Chat?> GetChatAsync(Guid id, string userId);
     Task<IEnumerable<Chat>> GetChatsAsync(string userId);
     Task UpdateChatAsync(Chat chat);
-    Task DeleteChatAsync(Guid id);
+    Task DeleteChatAsync(Guid id, string userId);
     Task AddMessageAsync(ChatMessage message);
     Task DeleteMessageAsync(Guid messageId);
     Task UpdateMessageAsync(Guid messageId, string newContent);

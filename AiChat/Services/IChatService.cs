@@ -7,7 +7,7 @@ public interface IChatService
     IAsyncEnumerable<string> SendMessageAsync(Guid chatId, string userMessage, IReadOnlyList<ChatAttachment> attachments, CancellationToken ct, string? modelId = null);
     IAsyncEnumerable<string> RegenerateAsync(Guid chatId, CancellationToken ct, string? modelId = null);
     IAsyncEnumerable<string> RespondToCurrentHistoryAsync(Guid chatId, CancellationToken ct, string? modelId = null);
-    IReadOnlyList<AiChat.Config.ModelOption> GetAvailableModels();
+    IReadOnlyList<AiChat.Config.DeploymentOption> GetAvailableDeployments();
     string DefaultModelId { get; }
     Task<string> GenerateTitleAsync(string firstUserMessage, CancellationToken ct);
 }

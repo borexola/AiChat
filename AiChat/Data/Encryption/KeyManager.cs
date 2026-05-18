@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using AiChat.Config;
-using Azure.Identity;
+using Azure.Core;
 
 public interface IEncryptionKeyManager
 {
@@ -37,13 +37,15 @@ public class KeyManager : IEncryptionKeyManager
 
     private readonly KeyVaultConfig _keyVaultConfig;
     private readonly EncryptionConfig _encryptionConfig;
+    private readonly TokenCredential? _credential;
     private byte[]? _keyCache;
     private readonly object _lock = new();
 
-    public KeyManager(KeyVaultConfig keyVaultConfig, EncryptionConfig encryptionConfig)
+    public KeyManager(KeyVaultConfig keyVaultConfig, EncryptionConfig encryptionConfig, TokenCredential? credential)
     {
         _keyVaultConfig = keyVaultConfig;
         _encryptionConfig = encryptionConfig;
+        _credential = credential;
     }
 
     private byte[] Key
@@ -72,9 +74,11 @@ public class KeyManager : IEncryptionKeyManager
 
     private byte[] FetchKeyFromKeyVault()
     {
-        var credential = new DefaultAzureCredential();
+        if (_credential is null)
+            throw new InvalidOperationException("A TokenCredential is required to access Key Vault but none was configured.");
+
         var secretClient = new Azure.Security.KeyVault.Secrets.SecretClient(
-            new Uri(_keyVaultConfig.Url!), credential);
+            new Uri(_keyVaultConfig.Url!), _credential);
 
         var secret = secretClient.GetSecret(_encryptionConfig.KeyName!).Value;
         var key = Convert.FromBase64String(secret.Value);

@@ -1,7 +1,8 @@
 html, body {
-    font-family: Verdana, Geneva, Tahoma, sans-serif;
-    background: #f8fafc;
-    color: #0f172a;
+    font-family: -apple-system, BlinkMacSystemFont, Inter, Vazirmatn, ui-sans-serif, system-ui, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans", sans-serif, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    font-size: 12pt;
+    background: #1c1e22;
+    color: #e2e8f0;
 }
 
 body {
@@ -9,7 +10,7 @@ body {
 }
 
 a, .btn-link {
-    color: #c47a00;
+    color: #ffa600;
 }
 
 .btn-primary {

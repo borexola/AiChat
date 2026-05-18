@@ -56,7 +56,9 @@ public class ChatDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.ChatId, e.CreatedAt });
             entity.Property(e => e.FileName).HasMaxLength(500);
-            entity.Property(e => e.Text).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.Text)
+                .HasTypedConversion(_keyManager)
+                .HasColumnType("nvarchar(max)");
             entity.Property(e => e.Embedding)
                 .HasConversion(new IntArrayToByteArrayConverter())
                 .HasColumnType("varbinary(max)");

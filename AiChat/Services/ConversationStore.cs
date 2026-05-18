@@ -30,13 +30,13 @@ public class ConversationStore : IConversationStore
         return chat;
     }
 
-    public async Task<Chat?> GetChatAsync(Guid id)
+    public async Task<Chat?> GetChatAsync(Guid id, string userId)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
         return await context.Chats
             .Include(c => c.Messages)
-            .FirstOrDefaultAsync(c => c.Id == id);
+            .FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId);
     }
 
     public async Task<IEnumerable<Chat>> GetChatsAsync(string userId)
@@ -58,11 +58,11 @@ public class ConversationStore : IConversationStore
         await context.SaveChangesAsync();
     }
 
-    public async Task DeleteChatAsync(Guid id)
+    public async Task DeleteChatAsync(Guid id, string userId)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        var chat = await context.Chats.FindAsync(id);
+        var chat = await context.Chats.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId);
         if (chat != null)
         {
             context.Chats.Remove(chat);

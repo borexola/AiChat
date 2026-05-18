@@ -56,7 +56,7 @@
             </div>
             <div class="top-bar-right">
                 <div class="model-selector-wrap">
-                    <label class="model-label" for="model-select">Model</label>
+                    <label class="model-label" for="model-select">Deployment</label>
                     <select id="model-select" class="model-select" @bind="selectedModelId" disabled="@isStreaming">
                         @foreach (var m in availableModels)
                         {
@@ -111,13 +111,13 @@
             }
         </div>
         <div class="chat-footer">
-            <ChatInput Message="@currentMessage"
-                       OnSendMessage="OnSendMessage"
+            <ChatInput OnSendMessage="OnSendMessage"
                        Sending="@isStreaming"
                        Files="@attachedFiles"
                        ShowFiles="@showFiles"
                        AllowedExtensions="@AllowedExtensions"
-                       OnFilesSelected="OnFilesSelected" />
+                       OnFilesSelected="OnFilesSelected"
+                       OnStop="OnStopStreaming" />
         </div>
     </div>
 </div>
@@ -129,6 +129,7 @@
     private List<ChatMessage> messages = new();
     private string streamingContent = "";
     private bool isStreaming = false;
+    private CancellationTokenSource? _streamingCts;
     private bool sidebarOpen = false;
     private string selectedChatTitle = "AI Chat";
     private string currentMessage = "";
@@ -146,19 +147,26 @@
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    private IReadOnlyList<AiChat.Config.ModelOption> availableModels = Array.Empty<AiChat.Config.ModelOption>();
+    private IReadOnlyList<AiChat.Config.DeploymentOption> availableModels = Array.Empty<AiChat.Config.DeploymentOption>();
     private string selectedModelId = "";
 
-    private string CurrentUserId =>
-        (User = (AuthStateProvider.GetAuthenticationStateAsync().Result).User) is { } u
-            ? (u.FindFirstValue("oid") ?? u.Identity?.Name ?? "anonymous")
-            : "anonymous";
+    private string _currentUserId = "anonymous";
+
+    private string CurrentUserId => _currentUserId;
 
     private ClaimsPrincipal? User { get; set; }
 
+    private async Task LoadCurrentUserAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        User = state.User;
+        _currentUserId = User.FindFirstValue("oid") ?? User.Identity?.Name ?? "anonymous";
+    }
+
     protected override async Task OnInitializedAsync()
     {
-        availableModels = ChatService.GetAvailableModels();
+        await LoadCurrentUserAsync();
+        availableModels = ChatService.GetAvailableDeployments();
         selectedModelId = ChatService.DefaultModelId;
         await LoadConversations();
     }
@@ -170,7 +178,7 @@
 
         if (SelectedChatId.HasValue)
         {
-            var chat = await Store.GetChatAsync(SelectedChatId.Value);
+            var chat = await Store.GetChatAsync(SelectedChatId.Value, CurrentUserId);
             if (chat != null)
             {
                 messages = chat.Messages.OrderBy(m => m.CreatedAt).ToList();
@@ -184,10 +192,15 @@
         }
     }
 
+    private Guid? _lastScrolledChatId;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (firstRender || _lastScrolledChatId != selectedChatId)
+        {
+            _lastScrolledChatId = selectedChatId;
             await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
+        }
     }
 
     private async Task LoadConversations()
@@ -205,7 +218,7 @@
 
     private async Task OnSelectChat(Guid chatId)
     {
-        var chat = await Store.GetChatAsync(chatId);
+        var chat = await Store.GetChatAsync(chatId, CurrentUserId);
         if (chat != null)
         {
             selectedChatId = chatId;
@@ -218,7 +231,7 @@
 
     private async Task OnDeleteChat(Guid chatId)
     {
-        await Store.DeleteChatAsync(chatId);
+        await Store.DeleteChatAsync(chatId, CurrentUserId);
         await LoadConversations();
         if (selectedChatId == chatId)
         {
@@ -246,7 +259,7 @@
         if (SelectedChatId.HasValue)
         {
             // Verify the chat still exists — it may have been deleted
-            var existing = await Store.GetChatAsync(SelectedChatId.Value);
+            var existing = await Store.GetChatAsync(SelectedChatId.Value, userId);
             if (existing != null)
             {
                 isNewChat = false;
@@ -322,25 +335,29 @@
         // Start streaming response
         isStreaming = true;
         streamingContent = "";
+        _streamingCts?.Dispose();
+        _streamingCts = new CancellationTokenSource();
+        var ct = _streamingCts.Token;
         StateHasChanged();
 
         try
         {
-            await foreach (var chunk in ChatService.SendMessageAsync(chatId, displayContent, turnAttachments, CancellationToken.None, selectedModelId))
+            await foreach (var chunk in ChatService.SendMessageAsync(chatId, displayContent, turnAttachments, ct, selectedModelId))
             {
                 streamingContent += chunk;
                 await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
                 StateHasChanged();
             }
         }
+        catch (OperationCanceledException) { /* user stopped the stream */ }
         finally
         {
             isStreaming = false;
             streamingContent = string.Empty;
-            var updatedChat = await Store.GetChatAsync(chatId);
+            var updatedChat = await Store.GetChatAsync(chatId, userId);
             messages = updatedChat?.Messages.OrderBy(m => m.CreatedAt).ToList() ?? new List<ChatMessage>();
 
-            // Silently generate and persist a title on the first assistant reply
+            // Silently generate
             if (isNewChat || (updatedChat?.Title is null or "New Chat" && updatedChat?.Messages.Count(m => m.Role == "assistant") == 1))
             {
                 _ = Task.Run(async () =>
@@ -348,7 +365,7 @@
                     try
                     {
                         var generatedTitle = await ChatService.GenerateTitleAsync(effectiveMessage, CancellationToken.None);
-                        var chatToUpdate = await Store.GetChatAsync(chatId);
+                        var chatToUpdate = await Store.GetChatAsync(chatId, _currentUserId);
                         if (chatToUpdate != null)
                         {
                             chatToUpdate.Title = generatedTitle;
@@ -371,6 +388,11 @@
             if (isNewChat)
                 Nav.NavigateTo($"/chat/{chatId}", replace: true);
         }
+    }
+
+    private void OnStopStreaming()
+    {
+        _streamingCts?.Cancel();
     }
 
     private async Task OnFilesSelected(List<IBrowserFile> files)
@@ -428,22 +450,26 @@
 
         isStreaming = true;
         streamingContent = "";
+        _streamingCts?.Dispose();
+        _streamingCts = new CancellationTokenSource();
+        var ct = _streamingCts.Token;
         StateHasChanged();
 
         try
         {
-            await foreach (var chunk in ChatService.RegenerateAsync(chatId, CancellationToken.None, selectedModelId))
+            await foreach (var chunk in ChatService.RegenerateAsync(chatId, ct, selectedModelId))
             {
                 streamingContent += chunk;
                 await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
                 StateHasChanged();
             }
         }
+        catch (OperationCanceledException) { /* user stopped */ }
         finally
         {
             isStreaming = false;
             streamingContent = string.Empty;
-            var updatedChat = await Store.GetChatAsync(chatId);
+            var updatedChat = await Store.GetChatAsync(chatId, CurrentUserId);
             messages = updatedChat?.Messages.OrderBy(m => m.CreatedAt).ToList() ?? new List<ChatMessage>();
             StateHasChanged();
             await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
@@ -504,7 +530,7 @@
         {
             isStreaming = false;
             streamingContent = string.Empty;
-            var updatedChat = await Store.GetChatAsync(activeChatId);
+            var updatedChat = await Store.GetChatAsync(activeChatId, CurrentUserId);
             messages = updatedChat?.Messages.OrderBy(m => m.CreatedAt).ToList() ?? messages;
             StateHasChanged();
             await JS.InvokeVoidAsync("scrollToBottom", chatAreaRef);
